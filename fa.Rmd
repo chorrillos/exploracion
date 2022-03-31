@@ -1,0 +1,192 @@
+
+
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+linkCsv="https://github.com/chorrillos/exploracion/raw/main/thedataFull.csv"
+AllData=read.csv(linkCsv)
+names(AllData)
+```
+```{r}
+select=c("Educ.sec.comp","esp.vid.nacer","Ing.fam.p.cap","NBS.2017","No.Pobreza","cobertura.cell_mf","Tasa.docen_pub_mf")
+
+theData=AllData[,select] 
+
+```
+
+
+## Proceso del Analisis Factorial Exploratorio (EFA)
+
+El análisis factorial exploratorio requiere que hagamos algunas observaciones previas.
+
+1. Calculemos matriz de correlación:
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+
+# esta es:
+library(polycor)
+corMatrix=polycor::hetcor(theData)$correlations
+```
+
+2. Explorar correlaciones:
+
+* Sin evaluar significancia:
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+library(ggcorrplot)
+
+ggcorrplot(corMatrix)
+```
+
+* Evaluando significancia:
+
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+ggcorrplot(corMatrix,
+          p.mat = cor_pmat(corMatrix),
+          insig = "blank")
+```
+
+Si puedes ver bloques correlacionados, hay esperanza de un buen analisis factorial.
+
+
+3. Verificar si datos permiten factorizar:
+
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+library(psych)
+psych::KMO(corMatrix) 
+```
+
+4. Verificar si la matriz de correlaciones es adecuada
+
+Aqui hay dos pruebas:
+
+* Hnula: La matriz de correlacion es una [matriz identidad](https://en.wikipedia.org/wiki/Identity_matrix)
+
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+cortest.bartlett(corMatrix,n=nrow(theData))$p.value>0.05
+```
+
+* Hnula: La matriz de correlacion es una [matriz singular](http://mathworld.wolfram.com/SingularMatrix.html).
+
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+library(matrixcalc)
+
+is.singular.matrix(corMatrix)
+```
+
+5. Determinar en cuantos factores o variables latentes podríamos redimensionar la data:
+
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+fa.parallel(theData,fm = 'ML', fa = 'fa')
+```
+
+
+6. Redimensionar a numero menor de factores
+
+* Resultado inicial:
+
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+library(GPArotation)
+resfa <- fa(theData,nfactors = 3,cor = 'mixed',rotate = "varimax",fm="minres")
+print(resfa$loadings)
+```
+
+* Resultado mejorado:
+
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+print(resfa$loadings,cutoff = 0.5)
+```
+
+Cuando logramos que cada variable se vaya a un factor, tenemos una _estructura simple_.
+
+* Resultado visual:
+
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+fa.diagram(resfa)
+```
+
+7. Evaluando Resultado obtenido:
+
+* ¿La Raíz del error cuadrático medio corregida está cerca a cero?
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+resfa$crms
+```
+
+* ¿La Raíz del error cuadrático medio de aproximación es menor a 0.05?
+
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+resfa$RMSEA
+```
+
+* ¿El índice de Tucker-Lewis es mayor a 0.9?
+
+```{r, echo=TRUE, eval=TRUE,warning=FALSE, message=FALSE}
+resfa$TLI
+```
+
+* ¿Qué variables aportaron mas a los factores?
+```{r}
+sort(resfa$communality)
+```
+
+* ¿Qué variables contribuyen a mas de un factor?
+
+```{r}
+sort(resfa$complexity)
+```
+
+```{r}
+names(theData)
+```
+
+## Proceso del Analisis Factorial Confirmatorio (CFA)
+
+```{r}
+model <- ' capacidad  =~ Educ.sec.comp + Tasa.docen_pub_mf
+           bienestar   =~ cobertura.cell_mf + NBS.2017
+           vulnerabilidad =~ Ing.fam.p.cap + esp.vid.nacer + No.Pobreza'
+```
+
+Ahora vemos qué arroja el modelo:
+
+```{r}
+# normalizar las variables:
+theData=scale(theData)
+
+library(lavaan)
+cfa_fit <- cfa(model, data=theData, 
+           std.lv=TRUE,  
+           missing="fiml")
+```
+
+Preparo los tests:
+```{r}
+allParamCFA=parameterEstimates(cfa_fit,standardized = T)
+allFitCFA=as.list(fitMeasures(cfa_fit))
+```
+
+Veamos resultados:
+
+* Si cada indicador tiene una buena conexión con su latente (ver p valor):
+```{r, echo=TRUE}
+library(knitr)
+kable(allParamCFA[allParamCFA$op=="=~",])
+
+```
+
+Averigüemos qué tan bien salió el modelo:
+
+* El ChiSquare es NO significativo (p_value debe ser mayor a 0.05 para que sea bueno)?
+
+```{r}
+
+allFitCFA[c("chisq", "df", "pvalue")] # pvalue>0.05
+```
+
+
+* El Índice Tucker Lewi es mayor a 0.9?
+
+```{r,echo=TRUE}
+allFitCFA$tli # > 0.90
+```
+* La Raíz del error cuadrático medio de aproximación es menor a 0.05?
+
+```{r,echo=TRUE}
+allFitCFA[c('rmsea.ci.lower','rmsea' ,'rmsea.ci.upper')] # 0.05 en el Int de Conf?
+```
