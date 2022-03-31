@@ -5,6 +5,8 @@ linkCsv="https://github.com/chorrillos/exploracion/raw/main/thedataFull.csv"
 AllData=read.csv(linkCsv)
 names(AllData)
 ```
+
+
 ```{r}
 select=c("Educ.sec.comp","esp.vid.nacer","Ing.fam.p.cap","NBS.2017","No.Pobreza","cobertura.cell_mf","Tasa.docen_pub_mf")
 
